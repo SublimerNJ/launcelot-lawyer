@@ -40,7 +40,7 @@ Goal: 게시 권고까지 한 번에 완주.
 1. quick 모드 1·2 단계 수행. 결과 캐시.
 2. 캐시된 `marketing-claims-review`에서 등급이 `명백` 또는 `가능`인 라인들을 추출.
 3. 각 라인에 대해 `feature-risk-assessment` 호출. 입력: 라인 + 죄목·규정 식별자. 결과 캐시.
-4. `launch-review` 호출. **launch-review가 내부에서 다시 `marketing-claims-review`를 돌리지 않도록**, 본 단계에서 캐시된 결과를 launch-review에 전달한다(launch-review SKILL.md의 Run order 3·5단계 입력 슬롯에 캐시 경로를 명시). 캐시 재사용 불가 시(파일 손상 등)에만 다시 돌린다.
+4. `launch-review` 호출. **launch-review가 내부에서 다시 `marketing-claims-review`를 돌리지 않도록**, 본 단계에서 캐시된 결과를 launch-review에 전달한다(launch-review SKILL.md의 Run order 입력 슬롯에 캐시 경로를 명시). 캐시 재사용 불가 시(파일 손상 등)에만 다시 돌린다.
 5. launch-review의 7카테고리 점검 + 게시 권고 메모 생성. revision으로 reviews/<slug>.md에 append.
 6. 종합 출력: 본 wrapper의 헤더 + is-this-a-problem 결과 + marketing-claims-review 요약 + 명백·가능 라인의 feature-risk-assessment 압축본 + launch-review 메모 + 결정 로깅 프롬프트.
 
@@ -48,13 +48,12 @@ Goal: 게시 권고까지 한 번에 완주.
 
 ## Run order
 
-1. Load `~/.claude/plugins/config/launcelot-lawyer-pro/CLAUDE.md`. config 없으면 cold-start-interview로 리다이렉트.
+1. 매터 활성 여부 확인. 활성이면 `matters/<slug>/matter.md`만 사실 컨텍스트로 사용. 별도 프로필 설정은 로드하지 않는다(존재하지 않는다).
 2. Resolve `--mode` (quick / full / 자동 추정).
-3. Resolve script input — paste / file path / wiki slug. 슬러그 계산은 launch-review와 같은 규칙(launch-review SKILL.md `## Run order` 3단계 참조). 매터 활성 여부 확인.
-4. `## Integrations` → `launcelot-lawyer`의 가용성을 한 번 점검. 비가용이면 본 wrapper 출력 헤더에 미검증 배너를 한 번에 부착하고, 하위 스킬들의 동일 배너 출력은 중복 표시되지 않게 압축한다(하위 스킬 호출 시 옵션 `--banner-suppress`를 부여하고 본 wrapper가 단일 책임으로 배너를 단다).
-5. 모드별 단계 실행. 단계 사이 체크포인트(아래) 적용.
-6. 종합 메모 출력 + 결정 로깅 프롬프트.
-7. 본 wrapper 실행 자체를 로그.
+3. Resolve script input — paste / file path / wiki slug. 슬러그 계산은 launch-review와 같은 규칙.
+4. 모드별 단계 실행. 단계 사이 체크포인트(아래) 적용.
+5. 종합 메모 출력 + 결정 로깅 프롬프트.
+6. 본 wrapper 실행 자체를 로그.
 
 ## 체크포인트
 
@@ -79,7 +78,8 @@ full 모드 체크포인트:
 본 wrapper의 모든 단계 결과는 캐시 디렉토리에 저장된다:
 
 `<scope>/review-script/<run-id>/`
-- `meta.yaml` — 실행 메타(slug, mode, started_at, last_checkpoint, status).
+
+- `meta.yaml` — 실행 메타(slug, mode, started_at, last_checkpoint, status, snippet_attempted, snippet_successful).
 - `is-this-a-problem.md`
 - `marketing-claims-review.md` (라인 단위 풀 출력)
 - `feature-risk-assessment/<line-id>.md`
@@ -93,8 +93,8 @@ full 모드 체크포인트:
 
 ```markdown
 [게시 권고 — <게시 가능 | 수정 후 게시 | 발행 보류 권고 | 보류(추가 확인 필요)>]
-[Mode: <quick | full>]  ·  [Matter: <slug | practice-level>]
-[launcelot-lawyer: <available | not available>]
+[Mode: <quick | full>] · [Matter: <slug | none>]
+[Snippet fetch: <n attempted> / <n successful>]
 
 # Review — <slug>
 
@@ -112,8 +112,7 @@ Completed: <ISO datetime>
 ## 2단계 결과 — marketing-claims-review (라인 단위)
 
 - 추출된 라인: <N>
-- 등급 분포: 명백 <n> / 가능 <n> / 회색지대 <n> / 안전 <n>
-- Hard-rule 히트: <n>
+- 등급 분포: 명백 <n> / 가능 <n> / 회색지대 <n> / 안전 <n> / snippet_missing <n>
 - 상위 3건:
   1. <…>
   2. <…>
@@ -126,8 +125,8 @@ Completed: <ISO datetime>
 명백·가능 라인 <N>건 심층 분석.
 
 | 라인 | 죄목·규정 | Axis 2 라벨 | Axis 3 최고 단계 | 권고 완화책 |
-|---|---|---|---|---|
-| <…> | <…> | <…> | <…> | <…> |
+| ---- | --------- | ----------- | ---------------- | ----------- |
+| <…>  | <…>       | <…>         | <…>              | <…>         |
 
 (전체는 `<scope>/review-script/<run-id>/feature-risk-assessment/`)
 
@@ -158,15 +157,15 @@ Completed: <ISO datetime>
 
 본 wrapper는 추정을 silently 적용하지 않는다.
 
-## Calibration
+## Snippet 정책
 
-본 wrapper는 calibration을 직접 적용하지 않는다. 하위 스킬들이 각자 calibration을 적용한다. 본 wrapper의 종합 권고는 launch-review의 권고를 그대로 사용하며, full 모드에서는 launch-review가 자동으로 marketing-claims-review와 feature-risk-assessment의 결과를 입력으로 받았으므로 calibration이 이미 반영된 상태다.
+본 wrapper는 직접 fetch하지 않는다. 모든 fetch는 하위 스킬들이 `references/snippet-protocol.md`에 따라 수행한다. 본 wrapper는 그 결과 카운트(attempted / successful)를 종합 헤더에 한 줄로 노출한다.
 
-본 wrapper가 추가하는 calibration 동작은 단 하나: 사용자 risk appetite가 `보수적`인데 quick 모드 결과가 `명백` 또는 hard-rule 히트를 1건 이상 포함하면, 종합 권고에 "본 모드는 quick이므로 명백·가능 라인의 심층 분석이 빠져 있다. 보수적 calibration에서는 full 모드 권장."이라는 한 줄을 추가.
+하위 스킬 중 하나라도 "Snippet 확보 실패 — 결과 생성 불가"로 중단하면 본 wrapper도 동일 사유로 중단하고, 그 메시지를 그대로 사용자에게 전달한다. 부분 실패(`snippet_missing`)는 종합 메모의 `미평가 라인` 섹션으로 노출.
 
 ## Failure handling
 
-- launcelot-lawyer 비가용: 본 wrapper 헤더에 한 번 배너. 하위 스킬 호출 시 `--banner-suppress` 또는 동등 옵션으로 중복 출력 방지. 단 미검증 인용은 각 단계 본문에 그대로 표시(인용 줄별 `[미검증]` 태그).
+- **하위 스킬 중 하나가 Snippet 확보 실패로 종료**: 본 wrapper도 즉시 종료. 이미 작성된 캐시는 보존. 사용자가 URL/원문을 제공하고 `--resume <run-id>`로 재시도 가능.
 - 한 단계에서 캐시 작성 실패: 사용자에게 보고하고 본 wrapper 중단. 이미 작성된 캐시는 보존. 사용자가 `--resume <run-id>`로 재개.
 - 사용자가 체크포인트에서 중단: `status: paused`로 캐시 저장. 재개 가능.
 - full 모드에서 명백·가능 라인이 0건: feature-risk-assessment 단계를 건너뛰고 launch-review로 직행. 출력에 "심층 분석 건너뜀 — 명백·가능 라인 없음" 표시.
@@ -186,5 +185,6 @@ Completed: <ISO datetime>
 - 발행 후 흐름(reg-feed-watcher / policy-diff / gap-surfacer / policy-redraft / comments)을 자동으로 호출하지 않는다.
 - 사용자 결정(게시함 / 보류 등)을 자동으로 기록하지 않는다. 결정은 launch-review의 결정 로깅 프롬프트 또는 본 wrapper의 종합 메모 끝의 프롬프트에서 사용자가 명시적으로 답해야 기록된다.
 - 사용자의 원본 대본을 수정하지 않는다.
-- 새로운 조문·판례를 단정하지 않는다(하위 스킬들이 launcelot-lawyer 위임 원칙을 그대로 따른다).
+- 새로운 조문·판례를 단정하지 않는다. 하위 스킬들이 snippet-protocol로 직접 fetch한다.
 - 하위 스킬들의 출력 포맷을 임의로 바꾸지 않는다. 종합 페이지에 압축하긴 하지만, 원본 풀 출력은 캐시 디렉토리에 그대로 보존된다.
+- 사용자 프로필·스타일·리스크 감수도로 권고를 조정하지 않는다.

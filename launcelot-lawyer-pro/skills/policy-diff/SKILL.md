@@ -12,14 +12,16 @@ argument-hint: "[규범 슬러그 또는 텍스트] [대본 슬러그 또는 폴
 
 # /launcelot-lawyer-pro:policy-diff
 
-This skill performs the actual diff between Korean regulatory texts and the user's script(s). It is the workhorse skill of Launcelot-Lawyer-Pro. It does not verify whether the regulatory text it received is current — that is `launcelot-lawyer`'s job — but it does require launcelot-lawyer verification before any output line carries a statutory or case-law citation.
+This skill performs the actual diff between Korean regulatory texts and the user's script(s). It is the workhorse skill of Launcelot-Lawyer-Pro.
+
+규범 텍스트(슬롯 A)는 본 스킬이 _직접_ `references/snippet-protocol.md` 절차로 fetch한 raw_quote를 사용한다. 외부 스킬에 위임하지 않는다. snippet 확보가 안 되면 diff를 시작하지 않는다.
 
 ## Run order
 
-1. Load `~/.claude/plugins/config/launcelot-lawyer-pro/CLAUDE.md`. If missing, redirect to `cold-start-interview`.
-2. Resolve slot A — the regulatory input.
-3. Resolve slot B — the script input.
-4. Verify slot A through `launcelot-lawyer`. Halt the diff if launcelot-lawyer is unavailable; emit a banner and degrade gracefully (see `## Failure handling`).
+1. 매터 활성 여부 확인. 활성이면 `matters/<slug>/matter.md`만 사실 컨텍스트로 사용. 출력 디렉토리(`diffs/`)는 없으면 자동 생성.
+2. Resolve slot A — 규범 입력. 본 스킬이 snippet-protocol로 fetch.
+3. Resolve slot B — 스크립트 입력.
+4. snippet 확보 검증. raw_quote가 비면 diff 시작 불가(아래 Failure handling).
 5. Run the diff. Emit findings.
 6. Persist results.
 7. Hand off to `gap-surfacer` for any finding the user wants tracked.
@@ -30,19 +32,22 @@ This skill performs the actual diff between Korean regulatory texts and the user
 
 Accept any of:
 
-- A 조문 reference (e.g., `형법 307조`, `정통망법 70조 1항`, `변호사 광고에 관한 규정 4조`). Skill fetches the current text via launcelot-lawyer.
-- A 판례 reference (e.g., `대법원 2020. 11. 19. 선고 2020도5813 판결`). Skill fetches the 판시사항·판결요지 via launcelot-lawyer.
-- Pasted regulatory text. Treated as user-asserted text; launcelot-lawyer is still asked to confirm currency and authenticity of the citation, but the diff proceeds against the pasted body.
-- A reg-feed-watcher item ID (when policy-diff is invoked from a digest handoff). Loads the entry from the most recent `digests/<YYYY-MM-DD>.md`.
-- A keyword set (e.g., `명예훼손 신착 판례`). Skill asks launcelot-lawyer for the top N items; user confirms which to diff.
+- A 조문 reference (e.g., `형법 307조`, `정통망법 70조 1항`, `변호사 광고에 관한 규정 4조`). 본 스킬이 `references/snippet-protocol.md` 절차로 fetch (default URL: law.go.kr / koreanbar.or.kr / ftc.go.kr).
+- A 판례 reference (e.g., `대법원 2020. 11. 19. 선고 2020도5813 판결`). 본 스킬이 glaw.scourt.go.kr 또는 ccourt.go.kr에서 fetch.
+- Pasted regulatory text. 이 경우 `slot_a.source = "user-pasted"`로 표시되며, 인용 식별자(법령명·조항 또는 판결번호)는 사용자가 제공한 그대로 기록한다. 본 스킬은 페이스트 텍스트가 진짜 현행본인지 별도로 fetch해 교차 확인하려 시도한다(snippet-protocol). 교차 확인이 성공하면 `slot_a.cross_verified = yes`, 실패하면 `cross_verified = no — user-asserted`로 표시.
+- A reg-feed-watcher item ID (when policy-diff is invoked from a digest handoff). reg-feed-watcher가 이미 fetch한 snippet 객체를 그대로 받는다.
+- A keyword set (e.g., `명예훼손 신착 판례`). 본 스킬이 glaw.scourt.go.kr 검색에서 top N을 fetch하고 사용자에게 어떤 항목을 diff할지 확인.
 
-For each, capture and persist:
+각 경우 다음을 기록·보존:
 
-- `slot_a.id` (slug or citation)
-- `slot_a.source_tier` (공식 / 준공식 / 민간 / pasted)
-- `slot_a.verification_status` (`verified-current` / `verified-but-superseded` / `unverified` / `not-found-by-launcelot-lawyer`)
-- `slot_a.text` (the controlling text used for the diff)
+- `slot_a.id` (slug 또는 citation)
+- `slot_a.source` (law.go.kr / glaw.scourt.go.kr / ccourt.go.kr / koreanbar.or.kr / ftc.go.kr / user-pasted)
+- `slot_a.url`
+- `slot_a.fetch_method` (WebFetch / firecrawl / jina / user-pasted)
 - `slot_a.fetched_at`
+- `slot_a.effective_date`
+- `slot_a.raw_quote` (diff에 실제로 사용된 본문)
+- `slot_a.cross_verified` (yes / no / n-a)
 
 ### Slot B — Script input
 
@@ -50,72 +55,86 @@ Accept any of:
 
 - A pasted script body.
 - A file path (Read).
-- A wiki slug (fetch via `njsidian-wiki`).
-- A library directive (`library`, `library:published`, `library:tagged:<tag>`) — diffs against every script the config's `## Script library` indexes.
+- A wiki slug (fetch via `wiki` MCP if available).
+- A library directive (`library`, `library:published`, `library:tagged:<tag>`).
+  - `script-library.yaml`이 있으면 거기 기재된 위치를 indexing. 파일이 없으면 본 스킬이 사용자에게 "라이브러리 폴더 또는 wiki prefix를 알려달라"고 한 번 묻고, 응답을 `script-library.yaml`에 lazy로 기록한 뒤 진행. 미응답이면 library 모드 거부, 단일 스크립트 모드로 격하.
 
-For library mode, iterate: one diff record per script. Concurrency is sequential by default to keep launcelot-lawyer load predictable.
+For library mode, iterate: one diff record per script. Concurrency is sequential by default to keep fetch load predictable.
 
 ## Diff method
 
 For each script (slot B), walk it line by line. For each line:
 
-1. Pre-filter: does the line plausibly implicate the death's-head categories that slot A addresses? Use the regulatory text's plain text to derive trigger tokens. Skip lines with zero trigger overlap.
+1. **Pre-filter**: does the line plausibly implicate the categories that slot A addresses? raw_quote에서 trigger 토큰을 추출. trigger 토큰이 라인에 0건이면 skip.
 
-2. Element decomposition: extract the elements the regulatory text requires.
-   - For statutes: 행위 주체, 행위 객체, 행위 양태, 결과·결과발생 가능성, 위법성 조각 사유.
-   - For 판례: 판시사항이 인정한 행위 패턴, 부정한 행위 패턴, 인정 요건.
-   - For 광고규정·표시광고법: 금지되는 표현 유형, 허용 조건, 실증 요건.
+2. **Element decomposition**: raw_quote에서 요건을 추출.
+   - 조문: 행위 주체, 행위 객체, 행위 양태, 결과·결과발생 가능성, 위법성 조각 사유.
+   - 판례: 판시사항이 인정한 행위 패턴, 부정한 행위 패턴, 인정 요건.
+   - 광고규정·표시광고법: 금지되는 표현 유형, 허용 조건, 실증 요건.
 
-3. Element matching: for each element, mark `present` / `absent` / `unclear` on the line. A `present-element` cluster sufficient to satisfy the regulatory text's prohibitory side raises a candidate finding. The skill never concludes a violation has occurred — only that the elements appear or do not appear in the line.
+3. **Element matching**: 각 요건에 대해 라인의 어느 부분이 `present` / `absent` / `unclear`인지 표시. 본 스킬은 위반이 *발생했다*고 결론짓지 않는다. 단지 라인에 요건이 *보이는지*만 표시.
 
-4. Defense window: for each candidate finding, list the defenses the regulatory text or surrounding doctrine allows.
+4. **Defense window**: 후보 항변 — 각 항변에 해당하는 조문/판례도 snippet-protocol로 fetch해 raw_quote를 본 finding에 첨부.
    - 진실성·공익성 항변 (형법 310, 정통망법 70 3항)
    - 정당행위 (형법 20)
    - 인용의 정당한 범위 (저작권법 28)
    - 변호사 광고규정의 허용 단서
    - 표시광고법의 실증된 표현 단서
 
-5. Risk band:
+5. **Risk band**:
    - **명백**: 요건이 라인 안에 모두 갖춰져 있고, 항변 단서가 라인 또는 라인 인접에 보이지 않음.
    - **가능**: 요건이 갖춰져 있으나 항변 단서가 있다(진실성·공익성·정당범위 등).
    - **회색지대**: 요건 일부 결여 또는 적용 자체에 다툼.
    - **안전**: 요건 명백히 결여.
 
-6. Apply user calibration from `~/.claude/plugins/config/launcelot-lawyer-pro/CLAUDE.md` `## Risk calibration` if that plugin is installed. 보수적 → +1 step. 공격적 → -1 step within 회색지대·가능, never to 안전.
+본 스킬은 사용자 risk appetite·Hard rules·Speech policy로 band를 조정하지 않는다. band는 한국법 자체와 fetch된 raw_quote만으로 결정한다.
 
 ## Output (per line finding)
 
 ```markdown
 ### Finding <slug-B>:<line-N>
 
-**Slot A:** <조문 또는 판례 식별자> <(verification: verified-current | unverified | …)>
+**Slot A snippet:**
+
+\`\`\`yaml
+
+- identifier: <…>
+  source: <…>
+  url: <…>
+  fetched_at: <…>
+  fetch_method: <…>
+  effective_date: <…>
+  cross_verified: <yes | no | n-a>
+  raw_quote: |
+  <…>
+  \`\`\`
 
 **Slot B:** <script slug>, line <N>
 
 **Quote (대본):** "<exact text>"
 
 **Elements present:**
+
 - <element 1>: <evidence in the line>
 - <element 2>: <…>
+
 **Elements absent / unclear:**
+
 - <element>: <왜 결여 또는 불분명>
 
-**Available defenses:**
-- 진실성·공익성 (형법 310): <적용 가능성 한 줄>
+**Available defenses (snippet 첨부):**
+
+- 진실성·공익성 (형법 310): <적용 가능성 한 줄 + snippet 객체>
 - 정당행위 (형법 20): <…>
 - 인용 (저작권법 28): <…>
 - 변호사 광고규정 단서: <…>
-- 기타: <…>
 
 **Risk band:** <명백 | 가능 | 회색지대 | 안전>
-**Calibration applied:** <보수적 +1 | 중도 | 공격적 -1>
 
 **Suggested fix direction:** <한 줄, 본문 톤 유지 가능 여부 포함>
+
 **Hand off to policy-redraft?** <yes | no — reason>
 **Hand off to gap-surfacer?** <yes (proposed gap entry below) | no>
-
-**Verification queue:**
-- launcelot-lawyer: confirm <조문 또는 판례> currency at fetch time; reverify if older than 7 days.
 ```
 
 ## Output (per script summary)
@@ -126,6 +145,7 @@ For each script (slot B), walk it line by line. For each line:
 - Lines analyzed: <N>
 - Findings: 명백 <n> / 가능 <n> / 회색지대 <n>
 - Defense-dependent findings: <n>
+- Snippet fetch: <n attempted> / <n successful>
 - Top three lines: <line numbers>
 - Suggested next step: <policy-redraft <these line ids> | publish a 수정 후 게시 memo | open gap entries for <these>>
 ```
@@ -139,10 +159,14 @@ Two files per diff run plus index updates.
 
 - `~/.claude/plugins/config/launcelot-lawyer-pro/diffs/_index.yaml`
   Run index:
+
   ```yaml
   - id: <reg-slug>-<YYYY-MM-DD>-<HHMM>
-    slot_a: <citation>
-    slot_a_verification: <…>
+    slot_a:
+      id: <citation>
+      source: <…>
+      cross_verified: <…>
+      fetched_at: <…>
     slot_b_targets: [<slug>, <slug>, …]
     findings_by_band:
       명백: <n>
@@ -161,20 +185,32 @@ If the user asks to exclude a script, a category of finding, or a defense path:
 
 1. Honor the request.
 2. Banner the exclusion at the top of every output and persist it in the index:
+
    > ⚠️ 범위 제한: 사용자 요청으로 <X> 제외. 본 diff는 전수 점검이 아니며, 제외된 영역의 위반 가능성은 식별되지 않았다.
+
 3. Carry the banner into any handoff to gap-surfacer or policy-redraft.
 
 ## Failure handling
 
-- **launcelot-lawyer unavailable**: do not silently proceed. Emit:
-  > ⚠️ launcelot-lawyer 비가용. 조문·판례 인용은 미검증 상태. 두 가지 선택지: (1) 사용자가 슬롯 A 텍스트의 출처와 최신성을 직접 보증하고 diff를 진행 (모든 출력에 `[사용자 보증]` 태그 부착), (2) diff 중단. 어느 쪽인가?
-  사용자가 (1)을 택해도 결과의 모든 인용 라인에 `[사용자 보증 — 미검증]` 태그를 영구히 부착한다.
-- **Slot A text is pasted and launcelot-lawyer says `not-found`**: 중단하고 사용자에게 "이 조문/판례를 찾지 못했다. 출처 URL을 확인하라"라고 보고. diff를 진행하지 않는다.
-- **Script library mode and 0 scripts indexed**: 디스크에 아무 것도 쓰지 않고 cold-start의 Module 5(스크립트 라이브러리)를 다시 돌릴 것을 안내.
+- **슬롯 A snippet 확보 실패**: diff를 시작하지 않는다. 사용자에게 다음 메시지 출력 후 종료.
+
+  ```
+  ⛔ Snippet 확보 실패 — policy-diff 시작 불가.
+  대상: <slot_a.id>
+  시도한 출처: <Step 1 URL>, <Step 2 URL>, <Step 3 URL>
+  실패 사유: <Step 1>, <Step 2>, <Step 3>
+  조치: 사용자가 URL을 제공하거나 원문을 paste하면 그 텍스트로 재시도.
+  ```
+
+- **슬롯 A가 사용자 paste이며 cross-verification 실패**: 사용자에게 "이 텍스트의 출처를 cross-verify하지 못했다. (1) 사용자가 보증하고 진행 — 결과 라인에 `[cross-verify 실패]` 태그 영구 부착, (2) 출처 URL을 직접 제공해 다시 시도, (3) diff 중단"을 묻는다.
+- **항변 조문 snippet 일부 실패**: 그 항변 조문은 finding에서 제거하고 사유를 명시. 핵심 항변(형법 310, 정통망법 70 3항 등)이 실패하면 band를 결정하지 않고 그 finding을 `보류`로 표시.
+- **Script library mode and 0 scripts indexed**: 사용자에게 "라이브러리 폴더 또는 wiki prefix를 알려달라" 한 번 묻고 응답을 `script-library.yaml`에 lazy로 기록. 응답이 없으면 library 모드를 거부하고 단일 스크립트 모드로만 진행.
 
 ## What this skill does NOT do
 
-- Does not state the current text of any 조문 or 판례 from model knowledge. All such text is fetched through launcelot-lawyer or pasted by the user.
+- Does not state the current text of any 조문 or 판례 from model knowledge. All such text is `references/snippet-protocol.md` 절차로 본 스킬이 직접 fetch하거나 사용자가 paste한 것에서만 만들어진다.
+- Does not delegate fetch or verification to any external skill (`launcelot-lawyer` included).
 - Does not conclude that a violation has occurred. Findings are element-level matches with defense windows.
 - Does not rewrite any line. That is policy-redraft.
 - Does not modify gap-tracker.yaml directly. It hands off candidate gaps to gap-surfacer, which writes the tracker.
+- Does not adjust band by user risk appetite — 본 플러그인은 그런 설정을 받지 않는다.

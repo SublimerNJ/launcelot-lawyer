@@ -13,23 +13,25 @@ argument-hint: "[gap-id | finding-id | pattern-id | --line <slug-B>:<N>]"
 
 # /launcelot-lawyer-pro:policy-redraft
 
-This skill drafts marked-up alternative lines that close a gap surfaced by `policy-diff` or `gap-surfacer`. It is a *first draft for review*, not a final rewrite. It does not touch the source script.
+This skill drafts marked-up alternative lines that close a gap surfaced by `policy-diff` or `gap-surfacer`. It is a _first draft for review_, not a final rewrite. It does not touch the source script.
+
+본 스킬은 새 조문·판례를 인용하지 않는다. 인용이 필요하면 입력 finding/gap에 이미 포함돼 있는 slot A snippet(`references/snippet-protocol.md` 절차로 policy-diff가 확보한 raw_quote)만 사용한다.
 
 ## Run order
 
-1. Load `~/.claude/plugins/config/launcelot-lawyer-pro/CLAUDE.md`. Cross-check Launcelot-Lawyer-Pro config for tone and risk calibration if installed.
+1. 매터 활성 여부 확인. 활성이면 `matters/<slug>/matter.md`만 사실 컨텍스트로 사용. 출력 디렉토리(`redrafts/`)는 없으면 자동 생성.
 2. Resolve the input target.
-3. Pull the corresponding finding context (the diff record or the gap entry).
+3. Pull the corresponding finding context (the diff record or the gap entry). slot A snippet과 raw_quote가 그 안에 있어야 한다. 없으면 거부(Failure handling).
 4. Generate three candidate redrafts using the strategies below.
 5. Emit a marked-up output the user can paste back into their drafting environment.
 6. Optionally hand off to koreanizer / per-attorney writing skill for tone smoothing.
 
 ## Input target resolution
 
-- `gap-id`: load `gap-tracker.yaml` entry. Use its `slug_b`, `line_n`, `quote`, `slot_a_id`, `defenses`, `suggested_fix_direction`.
-- `finding-id` (a policy-diff Finding identifier): load the run file under `diffs/`.
+- `gap-id`: load `gap-tracker.yaml` entry. Use its `slug_b`, `line_n`, `quote`, `slot_a_id`, `slot_a_snippet`, `defenses`, `suggested_fix_direction`.
+- `finding-id` (a policy-diff Finding identifier): load the run file under `diffs/`. snippet 객체를 그대로 가져온다.
 - `pattern-id`: load `patterns.yaml`. Run the strategies once at the pattern level, then again per concrete line, so the user gets one shared fix and N line-specific fixes.
-- `--line <slug-B>:<N>`: free-floating mode. Ask for the slot A context (조문·판례 식별자) if not provided. Refuse to proceed without slot A.
+- `--line <slug-B>:<N>`: free-floating mode. Ask for the slot A context (조문·판례 식별자) — 사용자가 식별자를 주면 본 스킬이 그 시점에 snippet-protocol로 fetch해 raw_quote를 확보한다. raw_quote 없이는 진행하지 않는다.
 
 ## Redraft strategies
 
@@ -81,12 +83,24 @@ Strategy 3은 라인 단위 redraft가 아니라 단락 또는 섹션 단위의 
 
 원본 라인: "<exact quote>"
 출처(스크립트): <slug-B>, line <N>
-원인(slot A): <조문 또는 판례 식별자> <(검증: …)>
+원인(slot A): <조문 또는 판례 식별자>
+slot A snippet:
+
+\`\`\`yaml
+identifier: <…>
+source: <…>
+url: <…>
+fetched_at: <…>
+raw_quote: |
+<…>
+\`\`\`
+
 원래 risk band: <…>
 
 ---
 
 ## Candidate 1 — Tone-preserving narrow fix
+
 **수정안:** "<line>"
 **적용 전술:** <식별성 약화 | 사실→의견 | …>
 **유지된 톤·말맛:** <한 줄>
@@ -95,6 +109,7 @@ Strategy 3은 라인 단위 redraft가 아니라 단락 또는 섹션 단위의 
 **필요 작성자 노트:** <… | 없음>
 
 ## Candidate 2 — Defense-strengthening fix
+
 **수정안:** "<line>"
 **적용 전술:** <출처 명시 | 공익성 신호 | …>
 **라인 자체 위험 등급 변화:** <…>
@@ -102,6 +117,7 @@ Strategy 3은 라인 단위 redraft가 아니라 단락 또는 섹션 단위의 
 **남는 위험:** <…>
 
 ## Candidate 3 — Restructuring guidance
+
 **구성 변경 방향:** <한 단락>
 **예시 신라인 1:** "<…>"
 **예시 신라인 2:** "<…>"
@@ -113,7 +129,7 @@ Strategy 3은 라인 단위 redraft가 아니라 단락 또는 섹션 단위의 
 ## 톤 후속 처리 권고
 
 - koreanizer로 자연스러움 보정 (사용 가능 시).
-- 채널 화자 톤(kmj/kmg/sbh/ldg/wja 중 해당) 스킬로 마지막 패스.
+- 채널 화자 톤(kmj/kmg/sbh/ldg/wja 중 해당) 스킬로 마지막 패스 — 사용자가 채널 화자 매핑을 알려주면.
 
 ## 적용 시 후속 작업
 
@@ -126,6 +142,7 @@ Strategy 3은 라인 단위 redraft가 아니라 단락 또는 섹션 단위의 
 - `~/.claude/plugins/config/launcelot-lawyer-pro/redrafts/<gap-id-or-finding-id>-<YYYY-MM-DD>-<HHMM>.md`
   Run output.
 - `redrafts/_index.yaml`:
+
   ```yaml
   - target: <gap-id | finding-id | pattern-id>
     at: <ISO-datetime>
@@ -134,23 +151,28 @@ Strategy 3은 라인 단위 redraft가 아니라 단락 또는 섹션 단위의 
     led_to_close: <gap-id | null>
   ```
 
-## Calibration
+## Candidate 우선순위 규칙
 
-- Launcelot-Lawyer-Pro `## Risk calibration` if available:
-  - 보수적: Candidate 1·2 모두 "+1 등급 안전쪽"으로 작성. Candidate 3을 기본 권장으로 설정.
-  - 중도: 세 후보를 균형으로.
-  - 공격적: Candidate 2를 기본 권장. 단 명백 → 회색지대 이하로는 redraft하지 않는다(공격적이라도 명백은 명백).
-- 채널 톤(`## Channel profile` → tone)에 맞게 후보의 어휘·문장 길이·구두점을 조정.
+세 후보를 모두 생성한 뒤 어느 것을 "권장"으로 표시할지는 다음 규칙으로 결정한다(사용자 risk appetite와 무관).
+
+- 원본 risk band가 `명백`이면 → Candidate 3(재구성) 또는 Candidate 1(좁은 수정) 중 등급을 가장 크게 낮추는 것.
+- 원본 risk band가 `가능`이고 항변이 강하면 → Candidate 2(항변 강화).
+- 원본 risk band가 `가능`이고 항변이 약하면 → Candidate 1(좁은 수정).
+- 원본 risk band가 `회색지대`이면 → Candidate 1 또는 Candidate 2 중 톤 손실이 적은 것.
+
+권장 표시는 메모 상단에 한 줄("권장: Candidate <N> — <사유>")로만 둔다. 사용자는 어느 후보든 채택할 수 있다.
 
 ## Failure handling
 
-- gap-id가 `slot_a_verification: not-found`인 채로 들어옴: redraft를 거부. 사유: "근거 조문·판례가 검증되지 않은 갭은 수정 대상이 아니다. 먼저 policy-diff를 재실행하여 slot A를 확정하라."
+- gap-id에 slot A snippet이 비어 있거나 raw_quote가 없음: redraft를 거부. 사유: "근거 조문·판례의 raw_quote가 없는 갭은 수정 대상이 아니다. 먼저 policy-diff를 재실행하여 slot A의 snippet을 확보하라."
 - 라인이 너무 길거나 한 라인 안에 두 죄목 이상이 얽혀 있음: Candidate 1·2를 분리(죄목별 별도 redraft)하고 Candidate 3은 단락 재구성으로 한 번에 처리.
 - 사용자가 직접 작성한 redraft가 더 낫다고 판단해 본 스킬의 후보를 모두 거부: `chosen_candidate: none`으로 기록하고 사용자가 채택한 자체 라인을 `user_decision_note`에 기록.
+- `--line` 모드에서 사용자가 slot A 식별자를 제공했으나 snippet-protocol fetch가 실패: redraft 거부. snippet 확보 실패 메시지를 그대로 사용자에게 전달.
 
 ## What this skill does NOT do
 
 - 사용자의 원본 스크립트 파일을 수정하지 않는다. 본 스킬의 출력은 항상 제안이며, 적용은 사용자 또는 다른 스킬의 소관.
 - 갭을 자동으로 close하지 않는다. close는 gap-surfacer의 `close` 서브커맨드에서 사용자가 명시적으로 실행한다.
-- 새로운 조문·판례를 단정하지 않는다. 본 스킬은 policy-diff/gap-surfacer가 이미 launcelot-lawyer로 검증한 slot A만 인용한다.
+- 새로운 조문·판례를 단정하지 않는다. 본 스킬은 policy-diff/gap-surfacer가 snippet-protocol로 확보한 slot A raw_quote만 인용한다. 외부 스킬(`launcelot-lawyer` 포함)에 위임하지 않는다.
 - 영상 자막·설명란을 직접 편집하지 않는다. 그것은 사용자의 영상 제작 도구가 한다.
+- 사용자 프로필·스타일·리스크 감수도에 따라 권장 후보를 바꾸지 않는다 — 본 플러그인은 그런 설정을 받지 않는다.

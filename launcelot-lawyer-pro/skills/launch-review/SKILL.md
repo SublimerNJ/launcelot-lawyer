@@ -16,17 +16,18 @@ This skill is the publication gate. It takes a full script, runs seven category-
 
 Use `launch-review` when the script is near-final and the user wants a single "ship / fix / hold" call. Use `marketing-claims-review` earlier in drafting when the user wants every flagged line surfaced.
 
+모든 조문·판례 인용은 본 스킬이 _직접_ `references/snippet-protocol.md` 절차로 fetch한 raw_quote에서만 만들어진다. 외부 스킬에 위임하지 않는다.
+
 ## Run order
 
-1. Load `~/.claude/plugins/config/launcelot-lawyer-pro/CLAUDE.md`. If missing or placeholdered, stop and direct the user to `cold-start-interview`.
+1. 매터가 활성화돼 있으면 `matters/<slug>/matter.md`만 사실 컨텍스트로 읽는다. 그 외 설정 파일은 로드하지 않는다. 결과 폴더(`reviews/`)는 없으면 자동 생성.
 2. Receive the script. Accept paste, file path, or wiki slug.
 3. Compute the script identifier (`slug`). Order of preference: explicit `--slug` argument; filename stem if a file was given; wiki slug if a wiki path was given; first 40 characters of the script title (Korean-safe slugification: lowercase ASCII for non-Hangul tokens, Hangul preserved, spaces → hyphen). Append `-<YYYY-MM-DD>` only if the same slug already exists in the reviews directory for the same date.
 4. Check `~/.claude/plugins/config/launcelot-lawyer-pro/reviews/<slug>.md`. If it exists, load it. Surface the prior recommendation, prior decisions, and any unresolved items at the top of the new run. Do NOT silently overwrite — the prior memo is appended to as a new revision section.
-5. Call `/launcelot-lawyer-pro:marketing-claims-review` on the script. Cache its per-line output (saved to `reviews/<slug>.claims.<ISO-datetime>.md`).
-6. Run each of the seven category checklists end-to-end across the entire script.
+5. Call `/launcelot-lawyer-pro:marketing-claims-review` on the script. Cache its per-line output (saved to `reviews/<slug>.claims.<ISO-datetime>.md`). marketing-claims-review가 결과 발행 자체를 거부하면(=모든 snippet fetch 실패) 본 스킬도 동일하게 거부하고 종료한다.
+6. Run each of the seven category checklists end-to-end across the entire script. 각 체크리스트 항목이 특정 조문·규정에 근거하면 그 조문은 snippet-protocol로 fetch한 raw_quote를 메모에 첨부한다.
 7. For each category, classify: `이슈 없음 / 경미 / 중대 / 발행 보류 권고`.
-8. Defer every 조문 / 판례 reference to `launcelot-lawyer` for existence verification; tag accordingly.
-9. Emit the memo to chat AND save it. See `## Persistence` below for exact write rules.
+8. Emit the memo to chat AND save it. See `## Persistence` below for exact write rules.
 
 ## Categories
 
@@ -52,7 +53,7 @@ Checklist:
 1. 식별 가능한 제3자 (실명, 직책, 사건번호, 묘사로 특정 가능) 등장 여부.
 2. 사실 적시인지, 의견 표현인지, 혼합인지.
 3. 적시 사실의 진실성 입증 가능성 (substantiation on file?).
-4. 공공의 이익 신호 (form 310 진실성·공익성 항변의 단서).
+4. 공공의 이익 신호 (형법 310 진실성·공익성 항변의 단서).
 5. "출판물에 의한 명예훼손" 가중 (형법 309) 적용 가능성 — 유튜브는 통상 정통망법 70로 가지만, 영상·자막·썸네일 결합으로 309가 함께 거론될 수 있는 패턴인지.
 6. 모욕적 평가 표현이 사실 적시와 분리되어 단독으로 존재하는가.
 
@@ -81,7 +82,7 @@ Checklist:
 
 Checklist:
 
-1. 자작 가이드 패턴. 시청자가 변호사 도움 없이 답변서·고소장·내용증명·계약서 등을 직접 완성하도록 안내하는가. (사용자 risk calibration의 hard rule과 교차 확인.)
+1. 자작 가이드 패턴. 시청자가 변호사 도움 없이 답변서·고소장·내용증명·계약서 등을 직접 완성하도록 안내하는가.
 2. 일반 법률 정보와 개별 사건 자문의 경계. 특정 시청자 상황에 대한 직접적 결론 제시인가.
 3. 면책 고지의 유무.
 
@@ -114,7 +115,7 @@ Checklist:
 검토 일자: <YYYY-MM-DD>
 검토 대상: <대본 식별자 + 길이>
 원본 라인별 검토: marketing-claims-review 캐시 <경로 또는 ID>
-검증 위임: launcelot-lawyer <available | not available>
+Snippet fetch 결과: <n attempted> / <n successful>
 
 ---
 
@@ -125,32 +126,33 @@ Checklist:
 
 ## 카테고리별 결과
 
-| 카테고리 | 결과 | 핵심 라인 | 비고 |
-|---|---|---|---|
-| 1. 변호사법·광고규정 | <…> | <라인 #> | <…> |
-| 2. 명예훼손·모욕 | <…> | <라인 #> | <…> |
-| 3. 저작권 | <…> | <라인 #> | <…> |
-| 4. 개인정보 | <…> | <라인 #> | <…> |
-| 5. 무자격 자문 경계 | <…> | <라인 #> | <…> |
-| 6. 표시광고법 | <…> | <라인 #> | <…> |
-| 7. 인접 영역 자문 | <…> | <라인 #> | <…> |
+| 카테고리             | 결과 | 핵심 라인 | 비고 |
+| -------------------- | ---- | --------- | ---- |
+| 1. 변호사법·광고규정 | <…>  | <라인 #>  | <…>  |
+| 2. 명예훼손·모욕     | <…>  | <라인 #>  | <…>  |
+| 3. 저작권            | <…>  | <라인 #>  | <…>  |
+| 4. 개인정보          | <…>  | <라인 #>  | <…>  |
+| 5. 무자격 자문 경계  | <…>  | <라인 #>  | <…>  |
+| 6. 표시광고법        | <…>  | <라인 #>  | <…>  |
+| 7. 인접 영역 자문    | <…>  | <라인 #>  | <…>  |
 
 ## 발행 보류 사유 (있을 때만)
 
-<해당 라인 인용 + 카테고리 + 위험 등급 + 수정 방향 한 줄.>
+<해당 라인 인용 + 카테고리 + 위험 등급 + 수정 방향 한 줄. 각 사유에 근거한 조문/판례의 snippet 객체를 첨부.>
 
 ## 수정 후 게시 항목
 
 각 항목에 대해:
+
 - 라인: "<원문>"
 - 문제: <카테고리 + 사유>
+- 근거 snippet: <조문/판례 identifier + source + fetched_at>
 - 수정안: "<대안 표현>"
 - 수정 후 예상 등급: <…>
 
-## 검증 큐 (launcelot-lawyer로 이관)
+## 인용된 조문·판례 (snippet 목록)
 
-- <조문 또는 판례 참조 1>
-- <…>
+대본 평가에 사용된 모든 조문·판례 raw_quote 객체를 한곳에 모아 제시. 본 메모 안에서 인용된 모든 텍스트는 이 목록의 raw_quote에 닿아야 한다.
 
 ## 작성자 결정 메모
 
@@ -161,9 +163,9 @@ Checklist:
 ## Decision rules
 
 - Any `명백` band line in `marketing-claims-review` automatically pushes the overall recommendation to at least `수정 후 게시`. Two or more `명백` lines → `발행 보류 권고` unless every one of them has an accepted suggested fix recorded by the user.
-- Any `## Hard rules` violation in the user profile → `발행 보류 권고` regardless of count.
-- Any `not available` finding on `launcelot-lawyer` → the memo is marked `잠정` and the recommendation cannot rise above `수정 후 게시` until verification is complete.
+- Any line marked `snippet_missing` in marketing-claims-review → 본 라인은 결과 등급 산정에서 *제외*하되 메모 상단에 `미평가 라인: <list>`로 별도 표시. 이런 라인이 핵심 의문 라인이면 사용자가 URL 또는 원문을 제공할 때까지 종합 권고는 `수정 후 게시`를 넘지 못한다.
 - Category-level severity is the max of its constituent line bands, never an average.
+- 본 스킬은 사용자 risk appetite·Hard rules·Speech policy로 권고를 조정하지 않는다. 권고는 한국법 자체와 fetch된 raw_quote만 보고 결정한다.
 
 ## Persistence
 
@@ -179,6 +181,7 @@ Every run writes to disk. Two files per script slug, plus an index.
 
 - `~/.claude/plugins/config/launcelot-lawyer-pro/reviews/_index.yaml`
   Index of all reviewed scripts. One entry per slug:
+
   ```yaml
   - slug: <slug>
     title: <script title>
@@ -188,7 +191,7 @@ Every run writes to disk. Two files per script slug, plus an index.
     current_recommendation: <게시 가능 | 수정 후 게시 | 발행 보류 권고>
     current_band_max: <명백 | 가능 | 회색지대 | 안전>
     unresolved_lines: <N>
-    hard_rule_hits: <N>
+    snippet_missing_lines: <N>
     decision_log:
       - revision: 1
         at: <ISO-datetime>
@@ -212,11 +215,11 @@ Each new revision appends this block to `reviews/<slug>.md`:
 이전 리비전과의 차이: <첫 리비전이면 "최초 검토". 이후 리비전이면 변경된 라인
 수와 추가/해소된 카테고리 요약. 같은 카테고리에서 위험 등급이 어떻게 이동했는지
 한 줄.>
-검증 위임: launcelot-lawyer <available | not available>
+Snippet fetch 결과: <n attempted> / <n successful>
 연결 파일: claims = reviews/<slug>.claims.<ISO-datetime>.md
 
 (이하 원래 메모 본문 — 종합 권고, 카테고리 표, 발행 보류 사유, 수정 후 게시
-항목, 검증 큐, 작성자 결정 메모)
+항목, snippet 목록, 작성자 결정 메모)
 ```
 
 ### Read-before-write
@@ -242,29 +245,16 @@ If the user gives a decision, append it to the `decision_log:` in
 `_index.yaml`. If "나중에", set `decided_by: pending` and move on. Never assume
 a decision.
 
-### Hard-rule audit trail
+## Failure handling
 
-Any `## Hard rules` hit recorded in any revision propagates a row to
-`reviews/_hard_rule_log.yaml`:
-
-```yaml
-- at: <ISO-datetime>
-  slug: <slug>
-  revision: <N>
-  rule: <verbatim hard-rule line from CLAUDE.md>
-  line: <quoted offending line from the script>
-  decision: <…>
-```
-
-This file is read by the `customize` skill when the user edits Hard rules so
-they can see the historical impact of changing or removing a rule.
+- **marketing-claims-review가 결과 발행 거부** (모든 라인의 snippet 확보 실패): 본 스킬도 동일 사유로 결과를 만들지 않는다. 사용자에게 동일 메시지를 그대로 전달하고 종료.
+- **일부 라인 snippet 미확보**: 그 라인을 `미평가 라인`으로 별도 표시. 종합 권고는 `수정 후 게시` 이하로 유지.
+- **marketing-claims-review가 pull-bucket hit 0건**: 7개 카테고리 체크리스트는 그대로 실행한다. 라인 추출에 잡히지 않는 publication-stage 이슈(저작권 인용 형식, 면책 고지 누락, 표시광고 실증 자료 미보관 등)는 카테고리 수준에서만 보인다.
 
 ## What this skill does NOT do
 
 - Does not generate full rewritten scripts. Hand off to `koreanizer` / per-attorney writing skill for production rewrites.
 - Does not approve publication. The recommendation is the validator's read; the attorney makes the publish call.
 - Does not modify any source script file. Persistence is to the plugin config directory only; the user's original script files are never edited.
-
-## Failure handling
-
-If `marketing-claims-review` returns zero pulled lines, run all seven category checklists anyway. Many publication-stage issues (저작권 인용 형식, 면책 고지 누락, 표시광고 실증 자료 미보관) do not surface at the line-extraction stage.
+- Does not delegate 조문·판례 검증 to any external skill (`launcelot-lawyer` included). 본 스킬과 marketing-claims-review가 snippet-protocol로 직접 fetch한다.
+- Does not consult any "Hard rules" / "Speech policy" / "Risk calibration" — 본 플러그인은 그런 설정을 받지 않는다.

@@ -1,11 +1,11 @@
 ---
 name: is-this-a-problem
 description: >
-  "이거 해도 되나?" 형 즉답 스킬. 짧은 질문·짧은 표현·짧은 시나리오를 사용자의 calibration과
-  Hard rule에 대조해 30초 안에 한 줄로 판정한다. 즉시 가능 / 한 번 더 봐야 함 / 보류
-  세 가지 중 하나. 사용자가 "이거 해도 돼?", "이 표현 가능?", "이 사건 직후 영상
-  올려도 돼?", "이거 사건수임 광고로 보일까?", "is this a problem", "sanity check"라고
-  말할 때 실행한다. 본 스킬의 출력은 게이트가 아니며, 보류 또는 한 번 더 봐야 함이면
+  "이거 해도 되나?" 형 즉답 스킬. 짧은 질문·짧은 표현·짧은 시나리오를 한국법 기준으로
+  30초 안에 한 줄로 판정한다. 즉시 가능 / 한 번 더 봐야 함 / 보류 세 가지 중 하나.
+  사용자가 "이거 해도 돼?", "이 표현 가능?", "이 사건 직후 영상 올려도 돼?",
+  "이거 사건수임 광고로 보일까?", "is this a problem", "sanity check"라고 말할 때
+  실행한다. 본 스킬의 출력은 게이트가 아니며, 보류 또는 한 번 더 봐야 함이면
   marketing-claims-review·launch-review·feature-risk-assessment로 핸드오프한다.
 argument-hint: "[질문 또는 짧은 표현]"
 ---
@@ -14,58 +14,56 @@ argument-hint: "[질문 또는 짧은 표현]"
 
 This skill answers a Slack-grade question: "can we do this?". It produces one of three calls in under 30 seconds: 즉시 가능 / 한 번 더 봐야 함 / 보류. It is not the launch gate — launch-review is. It is the early Slack-style sanity check.
 
+판정은 한국법(형법·정통망법·개인정보 보호법·변호사법·표시광고법·저작권법) 자체와 변협 광고규정만으로 한다. 사용자 프로필·스타일·리스크 감수도 같은 설정은 받지 않는다. 본 플러그인은 그런 것을 묻지 않는다.
+
 ## Run order
 
-1. Load `~/.claude/plugins/config/launcelot-lawyer-pro/CLAUDE.md`. Read `## Speech policy`, `## Hard rules`, `## Risk calibration`. Load matter-scoped overrides if `Active matter` is set.
-2. Read the user's question. If it is longer than ~5 sentences or includes a full script, refuse this skill and redirect to `marketing-claims-review`: 본 스킬은 단발 질의용.
-3. Pattern-match against the calibration:
-   - Hard rule hit → `보류`.
-   - Tier 1 materiality category 직격 → `보류` 또는 `한 번 더 봐야 함`.
-   - Speech policy 라벨 위반 직격 → `한 번 더 봐야 함`.
-   - 위 어디에도 명백히 해당하지 않으면 → `즉시 가능` (단 조건 있을 수 있음).
+1. 사용자의 질문 텍스트를 받는다. 매터가 활성화돼 있으면 `matters/<slug>/matter.md`만 읽어 컨텍스트(사건 단계·당사자 익명화 여부 등 사실 메모)로 사용한다. 외에는 어떤 설정 파일도 로드하지 않는다.
+2. 질문이 ~5문장보다 길거나 full 대본이면 본 스킬을 거부하고 `marketing-claims-review`로 redirect: 본 스킬은 단발 질의용.
+3. 한국법 카테고리에 패턴 매칭:
+   - 명백한 형사·행정법 위반(아래 "즉시 보류" 항목과 직접 매칭) → `보류`.
+   - 변호사법 23조·변협 광고규정·표시광고법의 핵심 금지 패턴 직격 → `보류`.
+   - 회색지대(아래 "한 번 더 봐야 함" 항목) → `한 번 더 봐야 함`.
+   - 위 어디에도 해당하지 않으면 → `즉시 가능` (단 조건 있을 수 있음).
 4. 한 줄 판정 + 사유 1~2문장 + 다음 단계 한 줄 출력.
 5. `보류` 또는 `한 번 더 봐야 함`이면 핸드오프 제안.
 
 ## Inputs the skill accepts
 
-| 유형 | 예시 | 처리 |
-|---|---|---|
-| 단발 표현 | "100% 무죄 받을 수 있습니다" | 단정 표현 정책과 광고규정에 대조 |
-| 단발 시나리오 | "이 사건 1심 끝났는데 영상 올려도 돼?" | Pending-case policy + 식별성 + 매터 정책 |
-| 단발 인물 언급 가부 | "○○ 회장 이름 그대로 써도 돼?" | Real-name policy + 공인 여부 + 사건 단계 |
-| 단발 비교 광고 | "다른 로펌보다 우리가 빠르다고 써도 돼?" | 광고규정 + 표시광고법 비교광고 |
-| 단발 자작 가이드 | "답변서 자작 가이드 영상 만들어도 돼?" | Hard rule (must-escalate / never) |
+| 유형                | 예시                                     | 처리                                              |
+| ------------------- | ---------------------------------------- | ------------------------------------------------- |
+| 단발 표현           | "100% 무죄 받을 수 있습니다"             | 표시광고법 + 변협 광고규정의 결과 보장 금지       |
+| 단발 시나리오       | "이 사건 1심 끝났는데 영상 올려도 돼?"   | 진행 단계 + 식별성 + 명예훼손/모욕 노출           |
+| 단발 인물 언급 가부 | "○○ 회장 이름 그대로 써도 돼?"           | 형법 307·310 + 정통망법 70 + 공인 여부            |
+| 단발 비교 광고      | "다른 로펌보다 우리가 빠르다고 써도 돼?" | 변협 광고규정 비교광고 금지 + 표시광고법 비교광고 |
+| 단발 자작 가이드    | "답변서 자작 가이드 영상 만들어도 돼?"   | 변호사법 23조 무자격 법률사무 + 사건유치 유도     |
 
 ## Pattern matching rules
 
 ### 즉시 보류 (`보류`)
 
 다음 중 하나라도 명백히 해당:
-- `## Hard rules` → Never에 등록된 패턴과 직접 매칭.
-- 사용자가 명시적으로 "절대 금지"로 정의한 Speech policy 카테고리에 정면 충돌 (예: real-name = "절대 실명 사용 안 함"인데 실명 사용 가부 질의).
-- 명백한 무자격 자문 영역 침해 (의료 진단·세무 환급 절차 등) 직접 질의.
-- 진행 중 사건 + 사용자 pending-case policy = "절대 안 함" 조합.
 
-출력은 한 줄 + 사유 + 후속.
+- 결과 보장 단정 표현("100% 무죄", "반드시 승소", "절대 못 잡힌다") — 변협 광고규정 + 표시광고법 위반 직격.
+- 비변호사 동업·사건유치 직접 유도("저희가 대신 답변서 써드립니다" 형식의 자작 가이드 포함) — 변호사법 23조 직격.
+- 명백히 식별 가능한 일반인(공인 아님) + 진행 중 형사·민사 사건 + 부정적 평가 — 형법 307·311 또는 정통망법 70 직격.
+- 의뢰인 식별정보(이름·소속·외모 특정 가능 묘사)를 동의 없이 노출 — 개인정보 보호법 71조 영역.
+- 모욕에 해당하는 표현("쓰레기", "사기꾼" 등 인격 모독) + 식별 가능 대상 — 형법 311 직격.
 
 ### 한 번 더 봐야 함 (`한 번 더 봐야 함`)
 
 다음 중 하나라도 해당:
-- `## Hard rules` → Must escalate에 등록된 패턴과 매칭.
-- Speech policy 라벨이 회색지대에 있음 (예: speculative-statement = "중도"인데 의견·평가 표현이 한정자 없이 들어감).
-- Tier 1 materiality 영역의 신착 변경(reg-feed-watcher digests/_unresolved.md)에 묻혀 있어 영향 가능성이 있음.
-- 실명·사건 단계 등 식별성 신호가 있는데 substantiation을 확인하지 못함.
 
-출력: 한 줄 + 무엇을 확인해야 다음 단계로 갈 수 있는지 한 줄 + 권장 후속 스킬.
+- 사실 적시 명예훼손 가능 영역인데 진실성·공익성(형법 310) 항변 가능 여부가 라인만으로는 판단 안 됨.
+- 공인 인물에 대한 비판인데 의견·평가의 한정자가 부족.
+- 비교광고인데 "객관적 근거" 표시 가능 여부가 라인만으로는 확인 불가.
+- 진행 중 사건인데 익명화 수준이 라인만으로는 판단 안 됨.
+- 새로운 죄목·새로운 광고규정 개정이 적용될 수 있는 영역(reg-feed-watcher의 `digests/_unresolved.md`에 해당 패턴 신착이 있는 경우).
+- 조문·판례 인용이 결론에 필요한데 본 스킬은 스니펫을 fetch하지 않는다(`marketing-claims-review`/`feature-risk-assessment`로 격하).
 
 ### 즉시 가능 (`즉시 가능`)
 
-세 가지 모두 만족:
-- Hard rule 미해당.
-- Speech policy 카테고리 모두 라벨의 허용 범위 안.
-- Tier 1 materiality 직격 영역 신호 없음.
-
-출력: "즉시 가능 — <짧은 이유>." 단 조건이 있으면 "단, <조건>"을 한 문장 더 부착.
+위 두 그룹 어디에도 해당하지 않을 때. 출력: "즉시 가능 — <짧은 이유>." 단 조건이 있으면 "단, <조건>"을 한 문장 더 부착.
 
 ## Output template
 
@@ -73,28 +71,23 @@ This skill answers a Slack-grade question: "can we do this?". It produces one of
 [은행 — <보류 | 한 번 더 봐야 함 | 즉시 가능>]
 
 질문: "<inline quote — first 80 chars>"
-매터: <slug | practice-level>
+매터: <slug | none>
 
 판정: <라벨>
-사유: <1~2문장. 어느 규범·정책·룰에 닿는지 인용.>
+사유: <1~2문장. 어느 한국법 조문·규정 카테고리에 닿는지 라벨 수준에서 언급.>
 조건: <"단, …" 형식. 없으면 한 줄 생략.>
 
 다음 단계: <한 줄 — `marketing-claims-review` / `feature-risk-assessment` / `launch-review` / `policy-diff` / "지금은 추가 액션 없음" 중 하나.>
 ```
 
-조문·판례 인용이 들어가면 `launcelot-lawyer`로 실존 확인 후. 비가용이면 인용 자체를 생략하고 사유를 룰 라벨 수준에서만 표현.
-
-## Calibration
-
-- 사용자 risk appetite가 `보수적`이면 `한 번 더 봐야 함`을 `보류`로 한 단계 끌어올린다. `즉시 가능`은 그대로.
-- `공격적`이면 `한 번 더 봐야 함` 중 일부를 `즉시 가능 — 단, …` 형태로 내릴 수 있다. 단 Hard rule 매칭은 절대 내리지 않는다.
+본 스킬은 _조문·판례를 인용하지 않는다_. 사유는 "변협 광고규정의 결과 보장 금지에 해당", "형법 307 영역" 같은 라벨 수준으로만 표현한다. 실제 조문 텍스트가 필요한 판단은 `marketing-claims-review`/`feature-risk-assessment`로 핸드오프하며, 그쪽은 `references/snippet-protocol.md`에 따라 원문을 fetch한다.
 
 ## Persistence
 
 - 본 스킬은 디스크에 큰 흔적을 남기지 않는다. 다만 모든 호출은 한 줄로 로그된다:
   - `<scope>/is-this-a-problem.log` — append-only.
   - 형식: `<ISO-datetime>\t<call>\t<question first 80>\t<handoff target or '-'>`
-- `<scope>`는 활성 매터에 따라 `matters/<slug>` 또는 프랙티스-레벨.
+- `<scope>`는 활성 매터에 따라 `matters/<slug>` 또는 프랙티스-레벨(`~/.claude/plugins/config/launcelot-lawyer-pro/`).
 
 ## Handoff contract
 
@@ -104,11 +97,12 @@ This skill answers a Slack-grade question: "can we do this?". It produces one of
 
 - 본 스킬은 한 번에 한 질문만 처리한다. 사용자가 두 가지를 동시에 묻으면 하나만 처리하고 나머지는 별도 호출을 권한다.
 - 본 스킬은 변호사 자신의 행동 판단(예: 외근 가부·수임 가부)에는 답하지 않는다. 콘텐츠 표현·게시 가부에 한정.
-- 본 스킬은 결정의 근거가 calibration·Hard rule·Speech policy일 때만 즉답한다. 그 밖의 영역(예: 새로운 죄목·새로운 광고규정 개정 적용)이 필요하면 자동으로 `한 번 더 봐야 함`으로 격하한다.
+- 본 스킬은 라벨 수준 즉답만 한다. 결론에 조문 텍스트나 판례 인용이 필요하면 자동으로 `한 번 더 봐야 함`으로 격하하고 `marketing-claims-review` 또는 `feature-risk-assessment`로 보낸다.
 
 ## What this skill does NOT do
 
 - 어떤 라인도 수정·생성·삭제하지 않는다.
 - 어떤 갭도 만들지 않는다.
 - 어떤 launch-review revision도 만들지 않는다.
-- 모델 지식으로 조문·판례를 단정하지 않는다.
+- 모델 지식으로 조문·판례를 단정하지 않는다. 조문 텍스트가 필요한 판단은 위임한다 — _다른 스킬에 위임하는 것이지 외부 스킬에 위임하는 것이 아니다_. 본 플러그인 내부의 `marketing-claims-review`/`feature-risk-assessment`가 `references/snippet-protocol.md` 절차로 직접 fetch한다.
+- 사용자 프로필·스타일·리스크 감수도·Hard rules 같은 설정을 묻지 않고 받지도 않는다.

@@ -14,7 +14,7 @@ This skill is the front door for the gap tracker. It is read-mostly. It calls in
 
 ## Run order
 
-1. Load `~/.claude/plugins/config/launcelot-lawyer-pro/CLAUDE.md` and `gap-tracker.yaml` (or matter-scoped variant if `Active matter` is set).
+1. 매터 활성 여부 확인. 활성이면 `matters/<slug>/gap-tracker.yaml`을, 비활성이면 프랙티스-레벨 `gap-tracker.yaml`을 사용. 트래커 파일이 없으면 "아직 등록된 갭이 없다"만 출력하고 종료.
 2. Resolve the subcommand (default `summary`).
 3. Pull only what the subcommand needs. Do not dump the whole tracker unless asked.
 4. Format for at-a-glance reading.
@@ -29,7 +29,7 @@ This skill is the front door for the gap tracker. It is read-mostly. It calls in
 ```markdown
 # 갭 요약 — <YYYY-MM-DD>
 
-매터: <slug | practice-level>
+매터: <slug | none>
 트래커 마지막 업데이트: <ISO-datetime>
 
 상태 분포: open <n> / 보류 <n> / 수정완료 <n> / 리스크수용 <n> / 비공개결정 <n>
@@ -38,7 +38,7 @@ This skill is the front door for the gap tracker. It is read-mostly. It calls in
 
 1. [<gap-id>] <risk-band> · <죄목·규정 약식> · <slug-B>:line <N>
    "<라인 인용 — first 60 chars>"
-   연령 <N일>  ·  <hard-rule hit | 패턴 N건과 묶임 | Tier 1 유래 | 일반>
+   연령 <N일> · <패턴 N건과 묶임 | Tier 1 유래 | 일반>
 
 2. <…>
 
@@ -60,10 +60,9 @@ This skill is the front door for the gap tracker. It is read-mostly. It calls in
 
 다음 우선순위로 정렬해 출력:
 
-1. Hard rule 매칭 갭.
-2. Tier 1 변경에서 유래한 갭.
-3. risk band 명백.
-4. risk band 가능 + aging breach.
+1. Tier 1 변경에서 유래한 갭.
+2. risk band 명백.
+3. risk band 가능 + aging breach.
 
 각 갭은 summary와 같은 한 블록 형식.
 
@@ -72,8 +71,9 @@ This skill is the front door for the gap tracker. It is read-mostly. It calls in
 aging threshold 초과 갭만. 정렬: 가장 오래된 것부터.
 
 각 줄에 다음을 명시:
+
 - 어느 임계값을 넘었는지 (예: "30일 초과").
-- 사용자가 정한 임계값별 액션 (config의 `## Gap tracker policy` → `Aging thresholds` 참조).
+- 임계값별 액션(기본값 7 / 14 / 30일 — gap-surfacer Aging policy 참조).
 - 어떤 알림이 이미 발송됐는지 (`gap-tracker.audit.log` 인용).
 
 ### patterns
@@ -82,6 +82,7 @@ aging threshold 초과 갭만. 정렬: 가장 오래된 것부터.
 
 ```markdown
 ### 패턴 <pattern-id>
+
 - 공통 slot A: <…>
 - 묶인 갭 (<N>건):
   - <gap-id>: <slug-B>:line <N> — "<라인 인용>"
@@ -90,28 +91,29 @@ aging threshold 초과 갭만. 정렬: 가장 오래된 것부터.
 - 패턴 형성 시점: <date>
 - 권장:
   - policy-redraft <pattern-id>로 공통 수정 방향 일괄.
-  - 사용자 calibration의 Hard rule에 패턴 등록 고려.
+  - patterns.yaml에 추적 패턴으로 등록할지 사용자에게 한 번 확인.
 - 패턴이 close되려면: 묶인 갭 N건이 모두 close 상태가 되어야 함.
 ```
 
 ### by-source <name>
 
-특정 출처(watchlist의 source name)에서 유래한 갭만 필터.
+특정 출처(slot A source name)에서 유래한 갭만 필터.
 
 ### by-matter <slug>
 
-특정 매터의 갭만 필터. `Active matter`가 그 매터로 설정되어 있지 않아도 본 명령은 동작한다(read 전용). Cross-matter context 정책이 `off`라도, 본 명령은 사용자 본인의 매터 내부 데이터를 읽는 요청이므로 허용.
+특정 매터의 갭만 필터. `Active matter`가 그 매터로 설정되어 있지 않아도 본 명령은 동작한다(read 전용).
 
-### <gap-id>
+### \<gap-id\>
 
 단일 갭 상세 뷰. summary 한 블록 포맷에 추가로:
 
-- discovered_in_diff_runs[] 전체 이력.
-- defenses의 풀 텍스트.
-- suggested_fix_direction 전체.
+- `discovered_in_diff_runs[]` 전체 이력.
+- `defenses`의 풀 텍스트.
+- `suggested_fix_direction` 전체.
 - 관련 redraft 출력의 경로(`redrafts/<gap-id>-<…>.md`)와 chosen_candidate.
-- 관련 launch-review revision 인용 (Launcelot-Lawyer-Pro 안에서 cross-link).
+- 관련 launch-review revision 인용(`reviews/<slug-B>.md` 안의 Revision <N>).
 - gap-tracker.audit.log 발췌(이 갭의 이력만).
+- `slot_a_snippet` 객체 전체 (source, url, fetched_at, raw_quote).
 
 ## Read-only contract
 
@@ -120,14 +122,6 @@ aging threshold 초과 갭만. 정렬: 가장 오래된 것부터.
 사용자가 `gaps close <gap-id>`처럼 액션 명령을 치면 다음과 같이 응답하고 라우팅:
 
 > 액션은 `/launcelot-lawyer-pro:gap-surfacer close <gap-id>`로 실행하면 된다. 본 스킬은 조회 전용이라 직접 닫지 않는다. (또는 사용자가 명시적으로 본 스킬에서 라우팅을 원한다면 동의 후 한 번만 호출.)
-
-## Calibration display
-
-요약 출력에서 사용자의 risk appetite를 한 줄로 표시:
-
-- 보수적: "보수적 calibration — 본 요약의 우선순위는 안전 쪽으로 +1단계 조정되어 있다."
-- 중도: 표시 없음 또는 한 줄로 명시.
-- 공격적: "공격적 calibration — 회색지대·가능 항목 일부는 한 단계 낮춰 표시된다."
 
 ## Persistence
 
@@ -141,5 +135,6 @@ aging threshold 초과 갭만. 정렬: 가장 오래된 것부터.
 
 - 갭을 생성·수정·삭제하지 않는다.
 - 알림을 송신하지 않는다.
-- 다른 매터의 데이터를 cross-read 하지 않는다(`Cross-matter context`가 on이고 사용자가 명시적으로 허락한 경우 제외).
-- 조문·판례 텍스트를 재인용하지 않는다. 트래커에 이미 저장된 값을 표시할 뿐.
+- 다른 매터의 데이터를 cross-read 하지 않는다 — `by-matter <slug>` 명령으로 명시적으로 그 매터를 지정한 경우에만 그 매터 파일을 읽는다.
+- 조문·판례 텍스트를 재인용하지 않는다. 트래커에 이미 저장된 `slot_a_snippet.raw_quote`를 표시할 뿐이다.
+- 사용자 프로필·스타일·리스크 감수도에 따라 우선순위 표시를 바꾸지 않는다 — 본 플러그인은 그런 설정을 받지 않는다.
