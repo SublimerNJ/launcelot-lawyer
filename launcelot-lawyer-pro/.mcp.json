@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "njsidian-wiki": {
+      "type": "stdio",
+      "title": "NJsidian wiki",
+      "description": "사용자의 NJsidian 지식 베이스 — 과거 대본, 채널 메모, 검토 이력을 보관한다. 대본 라이브러리·과거 검토 결과 검색에 사용한다."
+    }
+  },
+  "recommendedCategories": [
+    "knowledge-base",
+    "documents",
+    "chat",
+    "korean-legal-research"
+  ],
+  "notes": {
+    "launcelot-lawyer": "본 플러그인의 모든 조문·판례 실존 검증은 사용자가 별도로 보유한 launcelot-lawyer 스킬을 통해 이루어진다. launcelot-lawyer는 MCP가 아니라 스킬이므로 본 .mcp.json에 선언되지 않으며, 본 플러그인의 스킬들은 SKILL.md 본문에서 launcelot-lawyer 호출을 명세한다.",
+    "korean-official-sources": "국가법령정보센터(law.go.kr), 대법원 종합법률정보(glaw.scourt.go.kr), 헌법재판소(ccourt.go.kr), 국회의안정보시스템(likms.assembly.go.kr), 대한변호사협회, 공정거래위원회 등 한국 공식 출처에 대한 직접 MCP는 본 플러그인 작성 시점에 존재하지 않는다. reg-feed-watcher는 사용자의 launcelot-lawyer 스킬을 경유해 각 출처에 접근한다."
+  }
+}
