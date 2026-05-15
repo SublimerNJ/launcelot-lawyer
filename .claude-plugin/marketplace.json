@@ -27,40 +27,6 @@
         "regulatory-monitoring",
         "law-go-kr"
       ]
-    },
-    {
-      "name": "Launcelot-Product-Legal",
-      "source": "./Launcelot-Product-Legal",
-      "description": "[레거시 v0.1.0] 발행 전 대본 게이트 전용. launcelot-lawyer-pro에 통합되었음.",
-      "version": "0.1.0",
-      "author": {
-        "name": "남주",
-        "email": "sublimernj@gmail.com"
-      },
-      "category": "legal",
-      "tags": [
-        "youtube-script-review",
-        "lawyer-marketing",
-        "defamation",
-        "icnia-defamation"
-      ]
-    },
-    {
-      "name": "Launcelot-Regulatory-Legal",
-      "source": "./Launcelot-Regulatory-Legal",
-      "description": "[레거시 v0.1.0] 발행 후 규제 신착 감시 전용. launcelot-lawyer-pro에 통합되었음.",
-      "version": "0.1.0",
-      "author": {
-        "name": "남주",
-        "email": "sublimernj@gmail.com"
-      },
-      "category": "legal",
-      "tags": [
-        "korean-regulatory-monitoring",
-        "law-go-kr",
-        "supreme-court-judgments",
-        "kobaa-rules"
-      ]
     }
   ]
 }
