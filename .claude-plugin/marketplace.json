@@ -1,19 +1,19 @@
 {
   "name": "launcelot-lawyer",
-  "description": "한국 변호사 유튜브 대본의 발행 전 게이트와 발행 후 지속 감시를 위한 한국법 검증 플러그인 모음. 형법(307·309·311·156·283·347·314·350)·정보통신망법 70·개인정보 보호법·변호사법·대한변협 광고규정·표시광고법·저작권법 위반 가능성 추출/분류/등급화와, 국가법령정보센터·대법원·헌재·국회·변협·공정위 신착 모니터링.",
+  "description": "한국 변호사 유튜브 대본의 발행 전 게이트와 발행 후 지속 감시를 위한 한국법 검증 플러그인 모음. 형법(307·309·311·156·283·347·314·350)·정보통신망법 70·개인정보 보호법·변호사법·대한변협 광고규정·표시광고법·저작권법 위반 가능성 추출/분류/등급화와, 국가법령정보센터·대법원·헌재·국회·변협·공정위 신착 모니터링. 모든 조문·판례 인용은 본 플러그인이 직접 fetch한 스니펫에만 근거한다.",
   "owner": {
     "name": "남주",
     "email": "sublimernj@gmail.com"
   },
   "metadata": {
-    "version": "1.0.0"
+    "version": "1.1.0"
   },
   "plugins": [
     {
       "name": "launcelot-lawyer-pro",
       "source": "./launcelot-lawyer-pro",
-      "description": "한국 변호사 유튜브 대본의 발행 전 게이트와 발행 후 지속 감시를 한 플러그인으로 통합한 한국법 검증 스튜디오. product-legal·regulatory-legal를 단일 워크플로우로 합친 v1.0.0 통합본 (권장).",
-      "version": "1.0.0",
+      "description": "한국 변호사 유튜브 대본 전용 한국법 검증 스튜디오. 발행 전 게이트(review-script · is-this-a-problem · marketing-claims-review · feature-risk-assessment · launch-review)와 발행 후 감시(reg-feed-watcher · policy-diff · policy-redraft · comments · gap-surfacer · gaps)를 단일 워크플로우로 통합. 콜드 인터뷰·프로필·스타일 설정 없이 설치 즉시 사용. 조문·판례 인용은 WebFetch → firecrawl → jina 3단 fallback으로 매번 raw_quote를 fetch한 위에서만 만들어진다. v1.1.0 (권장).",
+      "version": "1.1.0",
       "author": {
         "name": "남주",
         "email": "sublimernj@gmail.com"
@@ -25,7 +25,9 @@
         "lawyer-advertising",
         "defamation",
         "regulatory-monitoring",
-        "law-go-kr"
+        "law-go-kr",
+        "snippet-verified",
+        "no-cold-interview"
       ]
     }
   ]
